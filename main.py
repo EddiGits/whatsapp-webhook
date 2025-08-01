@@ -67,7 +67,7 @@ def process_message(message):
         if message_type == 'text':
             # Handle text message
             text_content = message['text']['body']
-            subject = f"WhatsApp Task - {timestamp}"
+            subject = "Tasks"
             send_email(subject, text_content)
             
         elif message_type == 'audio':
@@ -77,7 +77,7 @@ def process_message(message):
             if audio_url:
                 audio_content = download_audio(audio_url)
                 if audio_content:
-                    subject = f"WhatsApp Voice Task - {timestamp}"
+                    subject = "Tasks"
                     send_email_with_attachment(subject, "Voice message attached", audio_content, 'voice_message.ogg')
         
         print(f"Processed {message_type} message successfully")
