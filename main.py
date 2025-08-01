@@ -19,7 +19,7 @@ SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 FROM_EMAIL = "EdwinPhaku@Gmail.com"
 TO_EMAIL = "EdwinPhaku@Gmail.com"
-EMAIL_PASSWORD = "your-app-password"  # Use App Password for Gmail
+EMAIL_PASSWORD = "poet nhdw oywe woyb"  # Use App Password for Gmail
 
 @app.route('/webhook', methods=['GET', 'POST'])
 def webhook():
