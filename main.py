@@ -75,10 +75,45 @@ def process_message(message):
             audio_id = message['audio']['id']
             audio_url = get_media_url(audio_id)
             if audio_url:
-                audio_content = download_audio(audio_url)
+                audio_content = download_media(audio_url)
                 if audio_content:
                     subject = "Tasks"
-                    send_email_with_attachment(subject, "Voice message attached", audio_content, 'voice_message.ogg')
+                    caption = message.get('audio', {}).get('caption', 'Voice message from WhatsApp')
+                    send_email_with_attachment(subject, caption, audio_content, 'voice_message.ogg', 'audio/ogg')
+        
+        elif message_type == 'image':
+            # Handle image message
+            image_id = message['image']['id']
+            image_url = get_media_url(image_id)
+            if image_url:
+                image_content = download_media(image_url)
+                if image_content:
+                    subject = "Tasks"
+                    caption = message.get('image', {}).get('caption', 'Image received from WhatsApp')
+                    send_email_with_attachment(subject, caption, image_content, 'whatsapp_image.jpg', 'image/jpeg')
+        
+        elif message_type == 'document':
+            # Handle document message
+            document_id = message['document']['id']
+            document_url = get_media_url(document_id)
+            if document_url:
+                document_content = download_media(document_url)
+                if document_content:
+                    subject = "Tasks"
+                    filename = message.get('document', {}).get('filename', 'document')
+                    caption = message.get('document', {}).get('caption', f'Document: {filename}')
+                    send_email_with_attachment(subject, caption, document_content, filename, 'application/octet-stream')
+        
+        elif message_type == 'video':
+            # Handle video message
+            video_id = message['video']['id']
+            video_url = get_media_url(video_id)
+            if video_url:
+                video_content = download_media(video_url)
+                if video_content:
+                    subject = "Tasks"
+                    caption = message.get('video', {}).get('caption', 'Video received from WhatsApp')
+                    send_email_with_attachment(subject, caption, video_content, 'whatsapp_video.mp4', 'video/mp4')
         
         print(f"Processed {message_type} message successfully")
         
@@ -100,8 +135,8 @@ def get_media_url(media_id):
         print(f"Error getting media URL: {e}")
         return None
 
-def download_audio(url):
-    """Download audio file from WhatsApp"""
+def download_media(url):
+    """Download media file from WhatsApp"""
     try:
         headers = {"Authorization": f"Bearer {ACCESS_TOKEN}"}
         response = requests.get(url, headers=headers)
@@ -111,7 +146,7 @@ def download_audio(url):
         return None
         
     except Exception as e:
-        print(f"Error downloading audio: {e}")
+        print(f"Error downloading media: {e}")
         return None
 
 def send_email(subject, body):
@@ -136,7 +171,7 @@ def send_email(subject, body):
     except Exception as e:
         print(f"Error sending email: {e}")
 
-def send_email_with_attachment(subject, body, attachment_data, filename):
+def send_email_with_attachment(subject, body, attachment_data, filename, mime_type):
     """Send email with attachment"""
     try:
         msg = MIMEMultipart()
@@ -146,8 +181,8 @@ def send_email_with_attachment(subject, body, attachment_data, filename):
         
         msg.attach(MIMEText(body, 'plain'))
         
-        # Add attachment
-        part = MIMEBase('application', 'octet-stream')
+        # Add attachment with proper MIME type
+        part = MIMEBase(mime_type.split('/')[0], mime_type.split('/')[1])
         part.set_payload(attachment_data)
         encoders.encode_base64(part)
         part.add_header('Content-Disposition', f'attachment; filename= {filename}')
@@ -160,7 +195,7 @@ def send_email_with_attachment(subject, body, attachment_data, filename):
         server.sendmail(FROM_EMAIL, TO_EMAIL, text)
         server.quit()
         
-        print(f"Email with attachment sent successfully: {subject}")
+        print(f"Email with attachment sent successfully: {subject} - {filename}")
         
     except Exception as e:
         print(f"Error sending email with attachment: {e}")
@@ -172,4 +207,5 @@ def health_check():
 if __name__ == '__main__':
     print("Starting WhatsApp Webhook Server...")
     print(f"Verify Token: {VERIFY_TOKEN}")
+    print("Supported message types: text, audio, image, document, video")
     app.run(host='0.0.0.0', port=5000, debug=True)
