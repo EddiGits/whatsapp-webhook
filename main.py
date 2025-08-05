@@ -109,9 +109,8 @@ def process_message(message):
                     
                     if audio_content:
                         subject = "Tasks"
-                        caption = audio_data.get('caption', 'Voice message from WhatsApp')
-                        logger.info(f"Sending audio email with caption: {caption}")
-                        send_email_with_attachment(subject, caption, audio_content, 'voice_message.ogg', 'audio/ogg')
+                        logger.info(f"Sending audio email")
+                        send_email_with_attachment(subject, "", audio_content, 'voice_message.ogg', 'audio/ogg')
                     else:
                         logger.error("Failed to download audio content")
                 else:
@@ -138,12 +137,11 @@ def process_message(message):
                     
                     if image_content:
                         subject = "Tasks"
-                        caption = image_data.get('caption', 'Image received from WhatsApp')
-                        logger.info(f"Sending image email with caption: {caption}")
+                        logger.info(f"Sending image email")
                         # Use the actual MIME type from WhatsApp
                         file_extension = mime_type.split('/')[-1] if mime_type else 'jpg'
                         filename = f'whatsapp_image.{file_extension}'
-                        send_email_with_attachment(subject, caption, image_content, filename, mime_type or 'image/jpeg')
+                        send_email_with_attachment(subject, "", image_content, filename, mime_type or 'image/jpeg')
                     else:
                         logger.error("Failed to download image content")
                 else:
@@ -170,9 +168,8 @@ def process_message(message):
                     if document_content:
                         subject = "Tasks"
                         filename = document_data.get('filename', 'document')
-                        caption = document_data.get('caption', f'Document: {filename}')
                         logger.info(f"Sending document email with filename: {filename}")
-                        send_email_with_attachment(subject, caption, document_content, filename, mime_type or 'application/octet-stream')
+                        send_email_with_attachment(subject, "", document_content, filename, mime_type or 'application/octet-stream')
                     else:
                         logger.error("Failed to download document content")
                 else:
@@ -198,11 +195,10 @@ def process_message(message):
                     
                     if video_content:
                         subject = "Tasks"
-                        caption = video_data.get('caption', 'Video received from WhatsApp')
-                        logger.info(f"Sending video email with caption: {caption}")
+                        logger.info(f"Sending video email")
                         file_extension = mime_type.split('/')[-1] if mime_type else 'mp4'
                         filename = f'whatsapp_video.{file_extension}'
-                        send_email_with_attachment(subject, caption, video_content, filename, mime_type or 'video/mp4')
+                        send_email_with_attachment(subject, "", video_content, filename, mime_type or 'video/mp4')
                     else:
                         logger.error("Failed to download video content")
                 else:
@@ -305,7 +301,8 @@ def send_email_with_attachment(subject, body, attachment_data, filename, mime_ty
         msg['To'] = TO_EMAIL
         msg['Subject'] = subject
         
-        msg.attach(MIMEText(body, 'plain'))
+        # Keep body empty for media attachments
+        msg.attach(MIMEText("", 'plain'))
         
         # Add attachment with proper MIME type
         part = MIMEBase(mime_type.split('/')[0], mime_type.split('/')[1])
