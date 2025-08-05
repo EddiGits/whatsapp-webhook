@@ -8,6 +8,11 @@ import requests
 import os
 from datetime import datetime
 import json
+import logging
+
+# Configure logging to show in Render
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
@@ -22,28 +27,35 @@ FROM_EMAIL = "EdwinPhaku@Gmail.com"
 TO_EMAIL = "EdwinPhaku@Gmail.com"
 EMAIL_PASSWORD = "poet nhdw oywe woyb"  # Use App Password for Gmail
 
+# Global variable to store last webhook data for debugging
+last_webhook_data = None
+last_error = None
+
 @app.route('/webhook', methods=['GET', 'POST'])
 def webhook():
+    global last_webhook_data, last_error
+    
     if request.method == 'GET':
         # Webhook verification
         mode = request.args.get('hub.mode')
         token = request.args.get('hub.verify_token')
         challenge = request.args.get('hub.challenge')
         
-        print(f"Verification request: mode={mode}, token={token}, challenge={challenge}")
+        logger.info(f"Verification request: mode={mode}, token={token}, challenge={challenge}")
         
         if mode == 'subscribe' and token == VERIFY_TOKEN:
-            print("Webhook verified successfully!")
+            logger.info("Webhook verified successfully!")
             return challenge, 200
         else:
-            print("Webhook verification failed!")
+            logger.error("Webhook verification failed!")
             return 'Forbidden', 403
     
     elif request.method == 'POST':
         # Handle incoming messages
         try:
             data = request.get_json()
-            print(f"Received webhook data: {json.dumps(data, indent=2)}")
+            last_webhook_data = data
+            logger.info(f"Received webhook data: {json.dumps(data, indent=2)}")
             
             if data and 'entry' in data:
                 for entry in data['entry']:
@@ -56,9 +68,10 @@ def webhook():
             return 'OK', 200
             
         except Exception as e:
-            print(f"Error processing webhook: {e}")
+            last_error = str(e)
+            logger.error(f"Error processing webhook: {e}")
             import traceback
-            traceback.print_exc()
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return 'Error', 500
 
 def process_message(message):
@@ -67,184 +80,197 @@ def process_message(message):
         message_type = message.get('type')
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
-        print(f"Processing message type: {message_type}")
-        print(f"Full message structure: {json.dumps(message, indent=2)}")
+        logger.info(f"Processing message type: {message_type}")
+        logger.info(f"Full message structure: {json.dumps(message, indent=2)}")
         
         if message_type == 'text':
             # Handle text message
             text_content = message['text']['body']
             subject = "Tasks"
-            print(f"Processing text message: {text_content}")
+            logger.info(f"Processing text message: {text_content}")
             send_email(subject, text_content)
             
         elif message_type == 'audio':
             # Handle voice message
-            print("Processing audio message...")
+            logger.info("Processing audio message...")
             audio_data = message.get('audio', {})
             audio_id = audio_data.get('id')
-            print(f"Audio ID: {audio_id}")
+            logger.info(f"Audio ID: {audio_id}")
             
             if audio_id:
-                audio_url = get_media_url(audio_id)
-                print(f"Audio URL: {audio_url}")
+                # Get media URL using the correct approach
+                media_url, mime_type = get_media_url_and_type(audio_id)
+                logger.info(f"Audio URL: {media_url}")
+                logger.info(f"Audio MIME type: {mime_type}")
                 
-                if audio_url:
-                    audio_content = download_media(audio_url)
-                    print(f"Audio content downloaded: {len(audio_content) if audio_content else 0} bytes")
+                if media_url:
+                    audio_content = download_media_with_auth(media_url)
+                    logger.info(f"Audio content downloaded: {len(audio_content) if audio_content else 0} bytes")
                     
                     if audio_content:
                         subject = "Tasks"
                         caption = audio_data.get('caption', 'Voice message from WhatsApp')
-                        print(f"Sending audio email with caption: {caption}")
+                        logger.info(f"Sending audio email with caption: {caption}")
                         send_email_with_attachment(subject, caption, audio_content, 'voice_message.ogg', 'audio/ogg')
                     else:
-                        print("Failed to download audio content")
+                        logger.error("Failed to download audio content")
                 else:
-                    print("Failed to get audio URL")
+                    logger.error("Failed to get audio URL")
             else:
-                print("No audio ID found in message")
+                logger.error("No audio ID found in message")
         
         elif message_type == 'image':
             # Handle image message
-            print("Processing image message...")
+            logger.info("Processing image message...")
             image_data = message.get('image', {})
             image_id = image_data.get('id')
-            print(f"Image ID: {image_id}")
+            logger.info(f"Image ID: {image_id}")
             
             if image_id:
-                image_url = get_media_url(image_id)
-                print(f"Image URL: {image_url}")
+                # Get media URL using the correct approach
+                media_url, mime_type = get_media_url_and_type(image_id)
+                logger.info(f"Image URL: {media_url}")
+                logger.info(f"Image MIME type: {mime_type}")
                 
-                if image_url:
-                    image_content = download_media(image_url)
-                    print(f"Image content downloaded: {len(image_content) if image_content else 0} bytes")
+                if media_url:
+                    image_content = download_media_with_auth(media_url)
+                    logger.info(f"Image content downloaded: {len(image_content) if image_content else 0} bytes")
                     
                     if image_content:
                         subject = "Tasks"
                         caption = image_data.get('caption', 'Image received from WhatsApp')
-                        print(f"Sending image email with caption: {caption}")
-                        send_email_with_attachment(subject, caption, image_content, 'whatsapp_image.jpg', 'image/jpeg')
+                        logger.info(f"Sending image email with caption: {caption}")
+                        # Use the actual MIME type from WhatsApp
+                        file_extension = mime_type.split('/')[-1] if mime_type else 'jpg'
+                        filename = f'whatsapp_image.{file_extension}'
+                        send_email_with_attachment(subject, caption, image_content, filename, mime_type or 'image/jpeg')
                     else:
-                        print("Failed to download image content")
+                        logger.error("Failed to download image content")
                 else:
-                    print("Failed to get image URL")
+                    logger.error("Failed to get image URL")
             else:
-                print("No image ID found in message")
+                logger.error("No image ID found in message")
         
         elif message_type == 'document':
             # Handle document message
-            print("Processing document message...")
+            logger.info("Processing document message...")
             document_data = message.get('document', {})
             document_id = document_data.get('id')
-            print(f"Document ID: {document_id}")
+            logger.info(f"Document ID: {document_id}")
             
             if document_id:
-                document_url = get_media_url(document_id)
-                print(f"Document URL: {document_url}")
+                media_url, mime_type = get_media_url_and_type(document_id)
+                logger.info(f"Document URL: {media_url}")
+                logger.info(f"Document MIME type: {mime_type}")
                 
-                if document_url:
-                    document_content = download_media(document_url)
-                    print(f"Document content downloaded: {len(document_content) if document_content else 0} bytes")
+                if media_url:
+                    document_content = download_media_with_auth(media_url)
+                    logger.info(f"Document content downloaded: {len(document_content) if document_content else 0} bytes")
                     
                     if document_content:
                         subject = "Tasks"
                         filename = document_data.get('filename', 'document')
                         caption = document_data.get('caption', f'Document: {filename}')
-                        print(f"Sending document email with filename: {filename}")
-                        send_email_with_attachment(subject, caption, document_content, filename, 'application/octet-stream')
+                        logger.info(f"Sending document email with filename: {filename}")
+                        send_email_with_attachment(subject, caption, document_content, filename, mime_type or 'application/octet-stream')
                     else:
-                        print("Failed to download document content")
+                        logger.error("Failed to download document content")
                 else:
-                    print("Failed to get document URL")
+                    logger.error("Failed to get document URL")
             else:
-                print("No document ID found in message")
+                logger.error("No document ID found in message")
         
         elif message_type == 'video':
             # Handle video message
-            print("Processing video message...")
+            logger.info("Processing video message...")
             video_data = message.get('video', {})
             video_id = video_data.get('id')
-            print(f"Video ID: {video_id}")
+            logger.info(f"Video ID: {video_id}")
             
             if video_id:
-                video_url = get_media_url(video_id)
-                print(f"Video URL: {video_url}")
+                media_url, mime_type = get_media_url_and_type(video_id)
+                logger.info(f"Video URL: {media_url}")
+                logger.info(f"Video MIME type: {mime_type}")
                 
-                if video_url:
-                    video_content = download_media(video_url)
-                    print(f"Video content downloaded: {len(video_content) if video_content else 0} bytes")
+                if media_url:
+                    video_content = download_media_with_auth(media_url)
+                    logger.info(f"Video content downloaded: {len(video_content) if video_content else 0} bytes")
                     
                     if video_content:
                         subject = "Tasks"
                         caption = video_data.get('caption', 'Video received from WhatsApp')
-                        print(f"Sending video email with caption: {caption}")
-                        send_email_with_attachment(subject, caption, video_content, 'whatsapp_video.mp4', 'video/mp4')
+                        logger.info(f"Sending video email with caption: {caption}")
+                        file_extension = mime_type.split('/')[-1] if mime_type else 'mp4'
+                        filename = f'whatsapp_video.{file_extension}'
+                        send_email_with_attachment(subject, caption, video_content, filename, mime_type or 'video/mp4')
                     else:
-                        print("Failed to download video content")
+                        logger.error("Failed to download video content")
                 else:
-                    print("Failed to get video URL")
+                    logger.error("Failed to get video URL")
             else:
-                print("No video ID found in message")
+                logger.error("No video ID found in message")
         
         else:
-            print(f"Unsupported message type: {message_type}")
+            logger.warning(f"Unsupported message type: {message_type}")
         
-        print(f"Processed {message_type} message successfully")
+        logger.info(f"Processed {message_type} message successfully")
         
     except Exception as e:
-        print(f"Error processing message: {e}")
+        logger.error(f"Error processing message: {e}")
         import traceback
-        traceback.print_exc()
+        logger.error(f"Traceback: {traceback.format_exc()}")
 
-def get_media_url(media_id):
-    """Get media URL from WhatsApp API"""
+def get_media_url_and_type(media_id):
+    """Get media URL and MIME type from WhatsApp API using the correct approach"""
     try:
         url = f"https://graph.facebook.com/v18.0/{media_id}"
         headers = {"Authorization": f"Bearer {ACCESS_TOKEN}"}
-        print(f"Requesting media URL from: {url}")
+        logger.info(f"Requesting media URL from: {url}")
         
         response = requests.get(url, headers=headers)
-        print(f"Media URL response status: {response.status_code}")
-        print(f"Media URL response: {response.text}")
+        logger.info(f"Media URL response status: {response.status_code}")
+        logger.info(f"Media URL response: {response.text}")
         
         if response.status_code == 200:
             response_data = response.json()
             media_url = response_data.get('url')
-            print(f"Extracted media URL: {media_url}")
-            return media_url
+            mime_type = response_data.get('mime_type')
+            logger.info(f"Extracted media URL: {media_url}")
+            logger.info(f"Extracted MIME type: {mime_type}")
+            return media_url, mime_type
         else:
-            print(f"Failed to get media URL. Status: {response.status_code}")
-            return None
+            logger.error(f"Failed to get media URL. Status: {response.status_code}")
+            return None, None
         
     except Exception as e:
-        print(f"Error getting media URL: {e}")
+        logger.error(f"Error getting media URL: {e}")
         import traceback
-        traceback.print_exc()
-        return None
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return None, None
 
-def download_media(url):
-    """Download media file from WhatsApp"""
+def download_media_with_auth(url):
+    """Download media file from WhatsApp with proper authentication"""
     try:
         headers = {"Authorization": f"Bearer {ACCESS_TOKEN}"}
-        print(f"Downloading media from: {url}")
+        logger.info(f"Downloading media from: {url}")
         
-        response = requests.get(url, headers=headers)
-        print(f"Download response status: {response.status_code}")
-        print(f"Download response headers: {dict(response.headers)}")
+        response = requests.get(url, headers=headers, stream=True)
+        logger.info(f"Download response status: {response.status_code}")
+        logger.info(f"Download response headers: {dict(response.headers)}")
         
         if response.status_code == 200:
             content = response.content
-            print(f"Successfully downloaded {len(content)} bytes")
+            logger.info(f"Successfully downloaded {len(content)} bytes")
             return content
         else:
-            print(f"Failed to download media. Status: {response.status_code}")
-            print(f"Response text: {response.text}")
+            logger.error(f"Failed to download media. Status: {response.status_code}")
+            logger.error(f"Response text: {response.text}")
             return None
         
     except Exception as e:
-        print(f"Error downloading media: {e}")
+        logger.error(f"Error downloading media: {e}")
         import traceback
-        traceback.print_exc()
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return None
 
 def send_email(subject, body):
@@ -264,12 +290,12 @@ def send_email(subject, body):
         server.sendmail(FROM_EMAIL, TO_EMAIL, text)
         server.quit()
         
-        print(f"Email sent successfully: {subject}")
+        logger.info(f"Email sent successfully: {subject}")
         
     except Exception as e:
-        print(f"Error sending email: {e}")
+        logger.error(f"Error sending email: {e}")
         import traceback
-        traceback.print_exc()
+        logger.error(f"Traceback: {traceback.format_exc()}")
 
 def send_email_with_attachment(subject, body, attachment_data, filename, mime_type):
     """Send email with attachment"""
@@ -295,19 +321,38 @@ def send_email_with_attachment(subject, body, attachment_data, filename, mime_ty
         server.sendmail(FROM_EMAIL, TO_EMAIL, text)
         server.quit()
         
-        print(f"Email with attachment sent successfully: {subject} - {filename}")
+        logger.info(f"Email with attachment sent successfully: {subject} - {filename}")
         
     except Exception as e:
-        print(f"Error sending email with attachment: {e}")
+        logger.error(f"Error sending email with attachment: {e}")
         import traceback
-        traceback.print_exc()
+        logger.error(f"Traceback: {traceback.format_exc()}")
 
 @app.route('/health', methods=['GET'])
 def health_check():
     return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
 
+@app.route('/debug', methods=['GET'])
+def debug_info():
+    """Debug endpoint to check what's happening"""
+    return jsonify({
+        "status": "debug_info",
+        "last_webhook_data": last_webhook_data,
+        "last_error": last_error,
+        "timestamp": datetime.now().isoformat()
+    })
+
+@app.route('/test-email', methods=['GET'])
+def test_email():
+    """Test endpoint to verify email functionality"""
+    try:
+        send_email("Test Email", "This is a test email from WhatsApp webhook server")
+        return jsonify({"status": "success", "message": "Test email sent"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
 if __name__ == '__main__':
-    print("Starting WhatsApp Webhook Server...")
-    print(f"Verify Token: {VERIFY_TOKEN}")
-    print("Supported message types: text, audio, image, document, video")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    logger.info("Starting WhatsApp Webhook Server...")
+    logger.info(f"Verify Token: {VERIFY_TOKEN}")
+    logger.info("Supported message types: text, audio, image, document, video")
+    app.run(host='0.0.0.0', port=5000, debug=False)  # Set debug=False for production
